@@ -1,5 +1,6 @@
 package eh.example.watertics.uiwatertics
 
+import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -24,33 +25,25 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.*
-import eh.example.watertics.models.*
+import eh.example.watertics.model.*
 import eh.example.watertics.ui.theme.*
 
 class HistoryStatsScreen : ComponentActivity() {
 
-    // --- STATE UI ---
-    private var showInsightCard by mutableStateOf(true)
-    private var showConfirmedCard by mutableStateOf(false)
-    private var finalConditionText by mutableStateOf("")
+    // State untuk menyimpan hasil validasi (Misal: "Pusing" atau "Lelah")
+    // Jika null, berarti belum divalidasi
+    private var validatedCondition by mutableStateOf<String?>(null)
 
-    // --- PENERIMA DATA DARI SCREEN B ---
+    // Launcher untuk menerima hasil dari InsightDetailScreen
     private val insightLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        if (result.resultCode == RESULT_OK) {
-            val data = result.data
-            val isAccurate = data?.getBooleanExtra("isPredictionAccurate", false) ?: false
-            val correction = data?.getStringExtra("userCorrection")
-            val predicted = data?.getStringExtra("predictedSymptom")
-
-            showInsightCard = false
-            showConfirmedCard = true
-
-            finalConditionText = if (isAccurate) {
-                "$predicted (Terkonfirmasi)"
-            } else {
-                correction ?: "Kondisi Lain"
+        if (result.resultCode == Activity.RESULT_OK) {
+            // Ambil data yang dikirim dari Layar B
+            val condition = result.data?.getStringExtra("FINAL_CONDITION")
+            if (condition != null) {
+                // Simpan ke state -> UI akan otomatis berubah jadi kartu hijau
+                validatedCondition = condition
             }
         }
     }
@@ -69,14 +62,14 @@ class HistoryStatsScreen : ComponentActivity() {
         val currentVolume = 400
         val targetVolume = 2000
         val currentHour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        // Generate insight dummy
         val insight = remember { InsightCalculator.generateInsight(currentVolume, targetVolume, currentHour) }
 
-        // --- DATA DUMMY DENGAN STATUS KESEHATAN ---
+        // Data dummy riwayat
         val historyData = listOf(
-            DailyHistory("Senin, 21 Nov", 1400, 2000, isSick = false), // Sehat
-            DailyHistory("Minggu, 20 Nov", 2000, 2000, isSick = false), // Sehat
-            DailyHistory("Sabtu, 19 Nov", 900, 2000, isSick = true),    // Sakit (Label Merah)
-            DailyHistory("Jumat, 18 Nov", 1100, 2000, isSick = true)    // Sakit (Label Merah)
+            DailyHistory("Senin, 21 Nov", 1400, 2000, false),
+            DailyHistory("Minggu, 20 Nov", 2000, 2000, false),
+            DailyHistory("Sabtu, 19 Nov", 1800, 2000, false)
         )
 
         Column(
@@ -89,25 +82,26 @@ class HistoryStatsScreen : ComponentActivity() {
             Text("Riwayat & Statistik", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Grafik
+            // Grafik Card
             StatsGraphCard(currentVolume, targetVolume)
             Spacer(modifier = Modifier.height(24.dp))
 
-            // --- KARTU INSIGHT (Flow Gambar 1 & 4) ---
-            if (showInsightCard && insight != null) {
+            // --- LOGIKA GANTI KARTU ---
+            if (validatedCondition != null) {
+                // KARTU HIJAU (HASIL VALIDASI) - Sesuai screenshot terakhir
+                ConfirmedCard(condition = validatedCondition!!)
+            } else if (insight != null) {
+                // KARTU ORANYE (ANALISA) - Sesuai screenshot pertama
                 InsightTeaserCard(
                     insight = insight,
                     onClick = { openInsightDetail(insight) }
                 )
-                Spacer(modifier = Modifier.height(24.dp))
             }
+            // ---------------------------
 
-            if (showConfirmedCard) {
-                ConfirmedCard(condition = finalConditionText)
-                Spacer(modifier = Modifier.height(24.dp))
-            }
+            Spacer(modifier = Modifier.height(24.dp))
 
-            // --- LIST RIWAYAT ---
+            // List Riwayat
             Text("Analisa Minggu Ini", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
             Spacer(modifier = Modifier.height(12.dp))
 
@@ -119,70 +113,7 @@ class HistoryStatsScreen : ComponentActivity() {
         }
     }
 
-    // --- ITEM KARTU RIWAYAT (UPDATE VISUAL) ---
-    @Composable
-    fun HistoryItemCard(data: DailyHistory) {
-        val percent = (data.drink.toFloat() / data.target)
-        val percentText = (percent * 100).toInt()
-
-        // Kalau Sakit, warna progress beda dikit biar matching (opsional, disini saya samain PrimaryPurple)
-        val progressColor = if (percent >= 1f) SuccessGreen else PrimaryPurple
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
-            elevation = CardDefaults.cardElevation(1.dp)
-        ) {
-            Row(
-                modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                // KIRI: Tanggal & Label Status
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(data.date, fontWeight = FontWeight.SemiBold, color = TextPrimary)
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        // LOGIKA LABEL (CHIP)
-                        if (data.isSick) {
-                            HealthStatusChip("Sakit", Color(0xFFFFEBEE), Color(0xFFD32F2F))
-                        } else {
-                            HealthStatusChip("Sehat", Color(0xFFE8F5E9), Color(0xFF2E7D32))
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text("${data.drink}ml / ${data.target}ml", fontSize = 12.sp, color = TextSecondary)
-                }
-
-                // KANAN: Progress
-                Box(contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(progress = { percent }, modifier = Modifier.size(45.dp), color = progressColor, trackColor = TrackPurple)
-                    Text("$percentText%", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                }
-            }
-        }
-    }
-
-    // --- KOMPONEN LABEL KECIL (CHIP) ---
-    @Composable
-    fun HealthStatusChip(text: String, bgColor: Color, textColor: Color) {
-        Surface(
-            color = bgColor,
-            shape = RoundedCornerShape(50), // Bulat lonjong
-        ) {
-            Text(
-                text = text,
-                color = textColor,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-            )
-        }
-    }
-
-    // --- KOMPONEN LAINNYA (SAMA SEPERTI SEBELUMNYA) ---
+    // Fungsi membuka activity detail
     private fun openInsightDetail(insight: InsightArguments) {
         val intent = Intent(this, InsightDetailScreen::class.java).apply {
             putExtra("currentVolume", insight.currentVolume)
@@ -192,15 +123,18 @@ class HistoryStatsScreen : ComponentActivity() {
             putExtra("scientificReasonCode", insight.scientificReasonCode)
             putExtra("gapDescription", insight.gapDescription)
         }
+        // Gunakan launcher, BUKAN startActivity biasa
         insightLauncher.launch(intent)
     }
+
+    // --- UI COMPONENTS ---
 
     @Composable
     fun InsightTeaserCard(insight: InsightArguments, onClick: () -> Unit) {
         Card(
             modifier = Modifier.fillMaxWidth().clickable { onClick() },
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = WarningOrangeBg),
+            colors = CardDefaults.cardColors(containerColor = WarningOrangeBg), // Warna Oranye Pudar
             elevation = CardDefaults.cardElevation(2.dp)
         ) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -208,7 +142,11 @@ class HistoryStatsScreen : ComponentActivity() {
                 Spacer(Modifier.width(12.dp))
                 Column {
                     Text("Analisa Pola Minum", fontWeight = FontWeight.Bold, color = WarningText)
-                    Text("Pola minummu berpotensi menyebabkan ${insight.predictedSymptom}. Cek detail >", fontSize = 13.sp, color = TextPrimary)
+                    Text(
+                        "Pola minummu berpotensi menyebabkan ${insight.predictedSymptom}. Cek detail >",
+                        fontSize = 13.sp,
+                        color = TextPrimary
+                    )
                 }
             }
         }
@@ -219,7 +157,7 @@ class HistoryStatsScreen : ComponentActivity() {
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = SuccessGreenBg),
+            colors = CardDefaults.cardColors(containerColor = SuccessGreenBg), // Warna Hijau Pudar
             elevation = CardDefaults.cardElevation(2.dp)
         ) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -253,6 +191,40 @@ class HistoryStatsScreen : ComponentActivity() {
                     color = PrimaryPurple,
                     trackColor = TrackPurple
                 )
+            }
+        }
+    }
+
+    @Composable
+    fun HistoryItemCard(data: DailyHistory) {
+        val percent = (data.drink.toFloat() / data.target)
+        val percentText = (percent * 100).toInt()
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
+            elevation = CardDefaults.cardElevation(1.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text(data.date, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("${data.drink}ml / ${data.target}ml", fontSize = 12.sp, color = TextSecondary)
+                }
+                Box(contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(
+                        progress = { percent },
+                        modifier = Modifier.size(45.dp),
+                        color = PrimaryPurple,
+                        trackColor = TrackPurple
+                    )
+                    Text("$percentText%", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                }
             }
         }
     }

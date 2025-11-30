@@ -22,21 +22,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import eh.example.watertics.models.*
-import eh.example.watertics.model.MedicalReasonRepository
+import eh.example.watertics.model.* // Import dari model yang sudah diperbaiki
 import eh.example.watertics.ui.theme.*
 
 class InsightDetailScreen : ComponentActivity() {
 
-    // 1. Cuma deklarasi variabel (JANGAN DIISI DISINI)
     private lateinit var insightData: InsightArguments
+    // State untuk memunculkan Dialog
     private var showDialog by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 2. ISI DATA DISINI (Di dalam onCreate)
-        // Karena 'intent' baru tersedia di sini
+        // Ambil data dari Intent
         insightData = InsightArguments(
             currentVolume = intent.getIntExtra("currentVolume", 0),
             targetVolume = intent.getIntExtra("targetVolume", 2000),
@@ -52,8 +50,6 @@ class InsightDetailScreen : ComponentActivity() {
             }
         }
     }
-
-    // ... (Sisa kode ke bawah tidak perlu diubah, biarkan sama) ...
 
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
@@ -79,21 +75,26 @@ class InsightDetailScreen : ComponentActivity() {
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp)
             ) {
-                // ... (Kode UI tetap sama) ...
-
-                // CONTOH BAGIAN TOMBOL (Biar tidak bingung)
-                // Kartu Data
-                Card(colors = CardDefaults.cardColors(containerColor = SurfaceWhite), shape = RoundedCornerShape(16.dp), elevation = CardDefaults.cardElevation(2.dp)) {
+                // --- KARTU MENGAPA (Atas) ---
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = CardDefaults.cardElevation(2.dp)
+                ) {
                     Column(Modifier.padding(20.dp)) {
                         Text("Mengapa Muncul Peringatan?", fontWeight = FontWeight.Bold, color = PrimaryPurple)
                         Spacer(Modifier.height(8.dp))
                         Text(insightData.gapDescription, color = TextSecondary, lineHeight = 20.sp)
                     }
                 }
+
                 Spacer(Modifier.height(16.dp))
 
-                // Kartu Penjelasan
-                Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF3E5F5)), shape = RoundedCornerShape(16.dp)) {
+                // --- KARTU PENJELASAN MEDIS (Tengah) ---
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF3E5F5)), // Ungu pudar
+                    shape = RoundedCornerShape(16.dp)
+                ) {
                     Column(Modifier.padding(20.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(explanation.icon, fontSize = 32.sp)
@@ -105,22 +106,25 @@ class InsightDetailScreen : ComponentActivity() {
                         Text(explanation.description, color = TextSecondary, lineHeight = 20.sp)
                     }
                 }
+
                 Spacer(Modifier.height(32.dp))
 
-                // Tombol
+                // --- BAGIAN TOMBOL ---
                 Text("Klarifikasi Kondisi", fontWeight = FontWeight.Bold, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, color = TextPrimary)
                 Spacer(Modifier.height(12.dp))
 
+                // TOMBOL 1: BENAR (Simpan prediksi awal)
                 Button(
-                    onClick = { sendFeedback(true, null) },
+                    onClick = { returnResult(insightData.predictedSymptom) },
                     modifier = Modifier.fillMaxWidth().height(50.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = SuccessText)
+                    colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen)
                 ) {
                     Text("✅ Benar, Saya ${insightData.predictedSymptom}")
                 }
 
                 Spacer(Modifier.height(12.dp))
 
+                // TOMBOL 2: SALAH (Buka Dialog)
                 OutlinedButton(
                     onClick = { showDialog = true },
                     modifier = Modifier.fillMaxWidth().height(50.dp),
@@ -131,7 +135,7 @@ class InsightDetailScreen : ComponentActivity() {
                 }
             }
 
-            // Dialog
+            // --- POP UP DIALOG (Pilihan User) ---
             if (showDialog) {
                 AlertDialog(
                     onDismissRequest = { showDialog = false },
@@ -142,7 +146,7 @@ class InsightDetailScreen : ComponentActivity() {
                             symptoms.forEach { symptom ->
                                 TextButton(
                                     onClick = {
-                                        sendFeedback(false, symptom)
+                                        returnResult(symptom) // Kirim hasil pilihan
                                         showDialog = false
                                     },
                                     modifier = Modifier.fillMaxWidth(),
@@ -155,20 +159,21 @@ class InsightDetailScreen : ComponentActivity() {
                         }
                     },
                     confirmButton = {},
-                    dismissButton = { TextButton(onClick = { showDialog = false }) { Text("Batal", color = TextSecondary) } },
+                    dismissButton = {
+                        TextButton(onClick = { showDialog = false }) { Text("Batal", color = TextSecondary) }
+                    },
                     containerColor = SurfaceWhite
                 )
             }
         }
     }
 
-    private fun sendFeedback(isAccurate: Boolean, correction: String?) {
-        val intent = Intent().apply {
-            putExtra("isPredictionAccurate", isAccurate)
-            putExtra("userCorrection", correction)
-            putExtra("predictedSymptom", insightData.predictedSymptom)
+    // Fungsi untuk mengirim data kembali ke Screen A
+    private fun returnResult(finalCondition: String) {
+        val resultIntent = Intent().apply {
+            putExtra("FINAL_CONDITION", finalCondition)
         }
-        setResult(Activity.RESULT_OK, intent)
-        finish()
+        setResult(Activity.RESULT_OK, resultIntent)
+        finish() // Tutup activity ini dan kembali
     }
 }
